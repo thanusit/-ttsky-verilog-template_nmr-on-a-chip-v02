@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-module tb_tt_um_thanusit_nmr_cores;
+module tb;
 
     // Testbench signals
     reg [7:0] ui_in;
@@ -12,7 +12,9 @@ module tb_tt_um_thanusit_nmr_cores;
     reg       ena;
     reg       clk;
     reg       rst_n;
-
+    reg [3:0] frozen_I;
+    reg [3:0] frozen_Q;
+    
     // Clock generation (50 MHz clock -> 20ns period)
     always #10 clk = ~clk;
 
@@ -93,8 +95,6 @@ module tb_tt_um_thanusit_nmr_cores;
         $display("[STATUS] rx_gate went LOW. Verifying demodulator freeze behavior...");
         
         // Capture data immediately upon closure
-        reg [3:0] frozen_I;
-        reg [3:0] frozen_Q;
         frozen_I = monitor_I;
         frozen_Q = monitor_Q;
 
