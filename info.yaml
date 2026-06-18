@@ -39,7 +39,7 @@ pinout:
   uo[1]: "rf_pulse_B"
   uo[2]: "rx_gate"
   uo[3]: "status_busy"
-  uo[4]: ""
+  uo[4]: "adc_in"
   uo[5]: ""
   uo[6]: ""
   uo[7]: ""
