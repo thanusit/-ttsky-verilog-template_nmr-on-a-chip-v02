@@ -16,11 +16,15 @@ module tt_um_thanusit_nmr_cores (
     input  wire       clk,      // clock
     input  wire       rst_n     // reset_n - low to reset
 );
-     // Internal wires connecting the sub-module outputs to top pins or other blocks
+    // Internal wires connecting the Pulse Sequencer sub-module
     wire psq_rf_A;
     wire psq_rf_B;
     wire psq_rx_gate;
     wire psq_busy;
+
+    // Internal wires connecting the Quadrature Demodulator sub-module
+    wire [3:0] demod_I;
+    wire [3:0] demod_Q;
 
     // Instantiate CPMG Pulse Sequencer
     pulse_sequencer psq_inst (
@@ -30,21 +34,35 @@ module tt_um_thanusit_nmr_cores (
         .spi_sclk(ui_in[1]),
         .spi_mosi(ui_in[2]),
         .spi_ss_n(ui_in[3]),
-        .rf_pulse_A(psq_rf_A),   // This can also route to the Transmitter block
-        .rf_pulse_B(psq_rf_B),   // This can also route to the Transmitter block
-        .rx_gate(psq_rx_gate),    // This can also route to the Demodulator block
+        .rf_pulse_A(psq_rf_A),   
+        .rf_pulse_B(psq_rf_B),   
+        .rx_gate(psq_rx_gate),    
         .status_busy(psq_busy)
     );
 
-    // Bind internal outputs to the physical hardware output pins
+    // Instantiate Quadrature Demodulator
+    quadrature_demodulator demod_inst (
+        .clk(clk),
+        .rst_n(rst_n),
+        .rx_gate(psq_rx_gate),    // Controlled by the pulse sequencer
+        .adc_in(ui_in[4]),        // 1-bit digitized RF input from RX chain
+        .i_out(demod_I),          // 4-bit filtered In-phase output
+        .q_out(demod_Q)           // 4-bit filtered Quadrature output
+    );
+
+    // Bind pulse sequencer internal outputs to physical pins
     assign uo_out[0] = psq_rf_A;
     assign uo_out[1] = psq_rf_B;
     assign uo_out[2] = psq_rx_gate;
     assign uo_out[3] = psq_busy;
 
-    // Cleanly tie off (forcing to 0) the remaining unused pins
-    assign uo_out[7:4] = 4'b0000;
-    assign uio_out     = 8'b00000000;
-    assign uio_oe      = 8'b00000000;
+    // Bind demodulator outputs to remaining physical pins (4-bits each)
+    // Demodulator outputs are placed onto the bidirectional bus
+    assign uio_out[3:0] = demod_I;
+    assign uio_out[7:4] = demod_Q;
+    assign uio_oe       = 8'b11111111; // Enable all as outputs for Tiny Tapeout
 
-endmodule  
+    // Cleanly tie off remaining unused top pins
+    assign uo_out[7:4]  = 4'b0000;
+
+endmodule
