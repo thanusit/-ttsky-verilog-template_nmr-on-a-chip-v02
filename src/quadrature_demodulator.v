@@ -7,6 +7,7 @@
 // Sub-Module: Quadrature Demodulator
 // Optimized for Sky130 area/routability constraints (Tiny Tapeout)
 // ============================================================================
+
 module quadrature_demodulator (
     input  wire       clk,
     input  wire       rst_n,
