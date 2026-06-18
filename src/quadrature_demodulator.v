@@ -3,109 +3,90 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-`default_nettype none
-
+// ============================================================================
+// Sub-Module: Quadrature Demodulator
+// Optimized for Sky130 area/routability constraints (Tiny Tapeout)
+// ============================================================================
 module quadrature_demodulator (
-    input  wire       clk,        // System clock
-    input  wire       rst_n,      // Active-low asynchronous reset
-    input  wire       rx_gate,    // Gate signal from sequencer (1 = process data)
-    input  wire       rx_in,      // Digitized 1-bit RF input signal
-    output reg  [7:0] i_out,      // Filtered 8-bit In-phase output
-    output reg  [7:0] q_out       // Filtered 8-bit Quadrature output
+    input  wire       clk,
+    input  wire       rst_n,
+    input  wire       rx_gate, // Active high: Demodulate only during RX windows
+    input  wire       adc_in,  // 1-bit comparative/Delta-Sigma input
+    output reg  [3:0] i_out,   // Filtered In-phase component
+    output reg  [3:0] q_out    // Filtered Quadrature component
 );
 
-    // =========================================================================
-    // 1. Local Oscillator (LO) Generation (f_clk / 4)
-    // =========================================================================
-    // A 2-bit counter creates a 4-state sequence for cosine and sine channels.
-    // LO Phase states: 
-    // State 0: cos =  1, sin =  0
-    // State 1: cos =  0, sin =  1
-    // State 2: cos = -1, sin =  0
-    // State 3: cos =  0, sin = -1
+    // 2-bit counter to generate 0, 90, 180, 270 degree Local Oscillator (LO)
     reg [1:0] lo_phase;
+    
+    // LO signals represented as signed 2-bit values (+1 or -1)
+    // 2'b01 = +1, 2'b11 = -1
+    reg signed [1:0] lo_i;
+    reg signed [1:0] lo_q;
 
+    // Local Oscillator Generator
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            lo_phase <= 2'b00;
+            lo_phase <= 2'b0;
+            lo_i     <= 2'sb01;
+            lo_q     <= 2'sb01;
         end else if (rx_gate) begin
             lo_phase <= lo_phase + 1'b1;
+            case (lo_phase)
+                2'b00: begin lo_i <= 2'sb01; lo_q <= 2'sb00; end // 0 deg (I=1, Q=0)
+                2'b01: begin lo_i <= 2'sb00; lo_q <= 2'sb01; end // 90 deg (I=0, Q=1)
+                2'b10: begin lo_i <= 2'sb11; lo_q <= 2'sb00; end // 180 deg (I=-1, Q=0)
+                2'b11: begin lo_i <= 2'sb00; lo_q <= 2'sb11; end // 270 deg (I=0, Q=-1)
+            endcase
+        end else begin
+            lo_phase <= 2'b0;
+            lo_i     <= 2'sb00;
+            lo_q     <= 2'sb00;
         end
     end
 
-    // =========================================================================
-    // 2. Mixing (Demodulation) Stage
-    // =========================================================================
-    // Maps 1-bit input (0 -> -1, 1 -> +1) multiplied by LO (1, 0, -1) 
-    // into 2-bit signed numbers (-1, 0, +1).
+    // Convert 1-bit input to signed representation (+1 or -1)
+    wire signed [1:0] signed_adc = adc_in ? 2'sb01 : 2'sb11;
+
+    // Mixer outputs (Signal * LO)
     reg signed [1:0] mixed_i;
     reg signed [1:0] mixed_q;
 
     always @(*) begin
-        if (!rx_gate) begin
-            mixed_i = 2'sb00;
-            mixed_q = 2'sb00;
-        end else begin
-            // In-Phase Mixer
-            case (lo_phase)
-                2'b00:   mixed_i = rx_in ? 2'sb01 : 2'sb11; // +1 or -1
-                2'b10:   mixed_i = rx_in ? 2'sb11 : 2'sb01; // -1 or +1
-                default: mixed_i = 2'sb00;                  // 0
-            endcase
-
-            // Quadrature Mixer
-            case (lo_phase)
-                2'b01:   mixed_q = rx_in ? 2'sb01 : 2'sb11; // +1 or -1
-                2'b11:   mixed_q = rx_in ? 2'sb11 : 2'sb01; // -1 or +1
-                default: mixed_q = 2'sb00;                  // 0
-            endcase
-        end
+        mixed_i = signed_adc * lo_i;
+        mixed_q = signed_adc * lo_q;
     end
 
-    // =========================================================================
-    // 3. Low-Pass Filtering (Moving Average / Boxcar Filter)
-    // =========================================================================
-    // Computes the moving average over 32 samples.
-    // Max positive output: +32 (needs 7 bits signed). 
-    // 8-bit accumulators prevent overflow.
-    reg signed [1:0] shift_reg_i [0:31];
-    reg signed [1:0] shift_reg_q [0:31];
-    reg signed [7:0] acc_i;
-    reg signed [7:0] acc_q;
-    integer j;
+    // Moving Average Low-Pass Filters (Accumulate over 8 clock cycles)
+    reg [2:0]           filter_cnt;
+    reg signed [4:0]    acc_i;
+    reg signed [4:0]    acc_q;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            acc_i <= 8'sh00;
-            acc_q <= 8'sh00;
-            for (j = 0; j < 32; j = j + 1) begin
-                shift_reg_i[j] <= 2'sb00;
-                shift_reg_q[j] <= 2'sb00;
-            end
+            filter_cnt <= 3'b0;
+            acc_i      <= 5'sb0;
+            acc_q      <= 5'sb0;
+            i_out      <= 4'b0;
+            q_out      <= 4'b0;
         end else if (rx_gate) begin
-            // Update Accumulators: Add new mixed sample, subtract oldest sample
-            acc_i <= acc_i + mixed_i - shift_reg_i[31];
-            acc_q <= acc_q + mixed_q - shift_reg_q[31];
+            filter_cnt <= filter_cnt + 1'b1;
+            
+            // Accumulate mixer results
+            acc_i <= acc_i + mixed_i;
+            acc_q <= acc_q + mixed_q;
 
-            // Advance the pipeline delay lines
-            shift_reg_i[0] <= mixed_i;
-            shift_reg_q[0] <= mixed_q;
-            for (j = 1; j < 32; j = j + 1) begin
-                shift_reg_i[j] <= shift_reg_i[j-1];
-                shift_reg_q[j] <= shift_reg_q[j-1];
+            // Output data and reset accumulator every 8 cycles
+            if (filter_cnt == 3'b111) begin
+                i_out      <= acc_i[4:1]; // Truncate/scale to match 4-bit output
+                q_out      <= acc_q[4:1];
+                acc_i      <= 5'sb0;
+                acc_q      <= 5'sb0;
             end
-        end
-    end
-
-// Output assignment (casts internal signed registers to top-level raw wires)
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            i_out <= 8'h00;
-            q_out <= 8'h00;
         end else begin
-            // Corrected logical condition
-              i_out <= rx_gate ? $unsigned(acc_i) : 8'h00;
-              q_out <= rx_gate ? $unsigned(acc_q) : 8'h00;
+            filter_cnt <= 3'b0;
+            acc_i      <= 5'sb0;
+            acc_q      <= 5'sb0;
         end
     end
 
