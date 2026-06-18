@@ -6,8 +6,8 @@ SIM ?= icarus
 FST ?= -fst # Use more efficient FST format
 TOPLEVEL_LANG ?= verilog
 SRC_DIR = $(PWD)/../src
-PROJECT_SOURCES = pulse_sequencer.v nmr_cores.v
-#PROJECT_SOURCES = quadrature_demodulator.v pulse_sequencer.v nmr_cores.v
+#PROJECT_SOURCES = pulse_sequencer.v nmr_cores.v
+PROJECT_SOURCES = quadrature_demodulator.v pulse_sequencer.v nmr_cores.v
 
 ifneq ($(GATES),yes)
 
