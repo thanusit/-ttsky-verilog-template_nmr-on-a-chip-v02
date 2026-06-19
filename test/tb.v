@@ -77,13 +77,14 @@ module tb ();
         rst_n = 1;
         #100;
 
-       // Configuration values setup: 
+     // Configuration values setup: 
        // Data arrangement: ({cfg_tA, tau, cfg_tB, cfg_echo_count})
        // Example: ({32'd10, 32'd40, 32'd20, 32'd4}) outputs cfg_tA=10, tau=40, cfg_tB=20, 
        // and cfg_echo_count=4 to the SPI 128-bits shift register.
+        
         $display("[TB] Sending configuration packet over SPI interface...");
         spi_send_word({32'd10, 32'd40, 32'd20, 32'd4});
-        repeat (3) begin
+       repeat (4) begin
         // Trigger pulse sequencing sequence execution
         $display("[TB] Pulsing START to activate sequence execution.");
         #40;
@@ -106,10 +107,13 @@ module tb ();
         @(negedge status_busy);
         $display("[TB] Sequencer finished sequence and returned to IDLE.");
 
-        #200;
+        #200;  //delay 200 clk before start next pulse sequence
         end
         $display("[TB] Simulation completed successfully.");
-   //   $finish;
+      // Reset Sequence
+        #100;
+        rst_n = 0;
+        #100;
     end
    
 // ========================================================================
