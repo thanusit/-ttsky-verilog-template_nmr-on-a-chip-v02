@@ -119,6 +119,7 @@ module tb ();
     real sample_freq  = 50000000;  // 50 MHz System Clock
     real phase_deg    = 0.0;
     integer sample_idx = 0;
+    integer tb_filter_cnt = 0; // TB-local counter to sample demod outputs every 8 cycles
 
     initial begin
         // Monitor the simulation and wait until the sequencer triggers the RX window
@@ -132,9 +133,9 @@ module tb ();
             
             if (phase_deg < 180.0) begin
                 // Force the internal ADC pin high to bypass top-level bus contentions
-                force user_project.adc_in = 1'b1; 
+                force ui_in[4] = 1'b1; 
             end else begin
-                force user_project.adc_in = 1'b0;
+                force ui_in[4] = 1'b0;
             end
             
             sample_idx = sample_idx + 1;
@@ -142,7 +143,9 @@ module tb ();
         end
 
         // Release control immediately when rx_gate drops to restore clean operation
-        release user_project.adc_in;
+        release ui_in[4];
+        // restore idle value for ui_in[4] so the vector matches the initial state
+        ui_in[4] = 1'b0;
         $display("[DEMOD_TB] RX Window closed. Released internal ADC line control.");
     end
 
@@ -157,10 +160,18 @@ module tb ();
         $display("----------------------------------------");
         
         while (rx_gate) begin
-            // Display results exactly when the filter counter rolls over
-            if (user_project.filter_cnt == 3'b111) begin
-                $display("%t\t%d\t%d", $time, $signed(user_project.i_out), $signed(user_project.q_out));
+            // Increment TB-side filter counter to sample every 8 cycles (3-bit rollover equivalent)
+            if (tb_filter_cnt == 7) begin
+                // demod I is uio_out[3:0], demod Q is uio_out[7:4]
+                // Sign-extend 4-bit values to 16-bit for display
+                $display("%t\t%d\t%d",
+                         $time,
+                         $signed({{12{uio_out[3]}}, uio_out[3:0]}),
+                         $signed({{12{uio_out[7]}}, uio_out[7:4]}));
             end
+            tb_filter_cnt = tb_filter_cnt + 1;
+            if (tb_filter_cnt == 8)
+                tb_filter_cnt = 0;
             @(posedge clk);
         end
     end
