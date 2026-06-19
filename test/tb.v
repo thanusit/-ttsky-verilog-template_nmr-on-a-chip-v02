@@ -77,7 +77,7 @@ module tb ();
         rst_n = 1;
         #100;
 
-        // Configuration values setup: 
+       // Configuration values setup: 
        // Data arrangement: ({cfg_tA, tau, cfg_tB, cfg_echo_count})
        // Example: ({32'd10, 32'd40, 32'd20, 32'd4}) outputs cfg_tA=10, tau=40, cfg_tB=20, 
        // and cfg_echo_count=4 to the SPI 128-bits shift register.
@@ -122,6 +122,8 @@ module tb ();
     integer tb_filter_cnt = 0; // TB-local counter to sample demod outputs every 8 cycles
 
     initial begin
+      // Continuously monitor the simulation for every RX window
+      forever begin
         // Monitor the simulation and wait until the sequencer triggers the RX window
         @(posedge rx_gate);
         $display("[DEMOD_TB] RX Window active! Intercepting ADC input with 1MHz RF stream...");
@@ -141,15 +143,15 @@ module tb ();
             sample_idx = sample_idx + 1;
             @(posedge clk);
         end
-
         // Release control immediately when rx_gate drops to restore clean operation
         release ui_in[4];
-        // restore idle value for ui_in[4] so the vector matches the initial state
+      end
+         // restore idle value for ui_in[4] so the vector matches the initial state
         ui_in[4] = 1'b0;
         $display("[DEMOD_TB] RX Window closed. Released internal ADC line control.");
     end
 
-    // Monitor Block: Track the integration values to your console in real-time
+   // Monitor Block: Track the integration values to your console in real-time
     initial begin
         @(posedge rx_gate);
         // Wait 4 clock cycles to align with internal LO pipeline startup
