@@ -153,6 +153,7 @@ module tb ();
 
    // Monitor Block: Track the integration values to your console in real-time
     initial begin
+      forever begin
         @(posedge rx_gate);
         // Wait 4 clock cycles to align with internal LO pipeline startup
         repeat (4) @(posedge clk); 
@@ -176,6 +177,7 @@ module tb ();
                 tb_filter_cnt = 0;
             @(posedge clk);
         end
+      end 
     end
    
    // Dump the signals to a FST file. You can view it with gtkwave or surfer.
