@@ -109,7 +109,62 @@ module tb ();
         $display("[TB] Simulation completed successfully.");
         $finish;
     end
-  
+   
+// ========================================================================
+// APPENDED: Non-Invasive Demodulator RF Signal Injector
+// ========================================================================
+
+    // Math parameters for the RF carrier synthesis (50 MHz clock)
+    real carrier_freq = 1000000;   // 1 MHz RF Carrier
+    real sample_freq  = 50000000;  // 50 MHz System Clock
+    real phase_deg    = 0.0;
+    integer sample_idx = 0;
+
+    initial begin
+        // Monitor the simulation and wait until the sequencer triggers the RX window
+        @(posedge rx_gate);
+        $display("[DEMOD_TB] RX Window active! Intercepting ADC input with 1MHz RF stream...");
+
+        // Process samples continuously as long as the data acquisition window is open
+        while (rx_gate) begin
+            // Calculate square wave phase approximation
+            phase_deg = (sample_idx * (carrier_freq / sample_freq) * 360.0) % 360.0;
+            
+            if (phase_deg < 180.0) begin
+                // Force the internal ADC pin high to bypass top-level bus contentions
+                force user_project.adc_in = 1'b1; 
+            end else begin
+                force user_project.adc_in = 1'b0;
+            end
+            
+            sample_idx = sample_idx + 1;
+            @(posedge clk);
+        end
+
+        // Release control immediately when rx_gate drops to restore clean operation
+        release user_project.adc_in;
+        $display("[DEMOD_TB] RX Window closed. Released internal ADC line control.");
+    end
+
+    // Monitor Block: Track the integration values to your console in real-time
+    initial begin
+        @(posedge rx_gate);
+        // Wait 4 clock cycles to align with internal LO pipeline startup
+        repeat (4) @(posedge clk); 
+        
+        $display("[DEMOD_TB] Tracking integrated boxcar outputs (sampled every 8 cycles):");
+        $display("Time\t\t\tI_OUT\tQ_OUT");
+        $display("----------------------------------------");
+        
+        while (rx_gate) begin
+            // Display results exactly when the filter counter rolls over
+            if (user_project.filter_cnt == 3'b111) begin
+                $display("%t\t%d\t%d", $time, $signed(user_project.i_out), $signed(user_project.q_out));
+            end
+            @(posedge clk);
+        end
+    end
+   
    // Dump the signals to a FST file. You can view it with gtkwave or surfer.
     initial begin
       $dumpfile("tb.vcd");
