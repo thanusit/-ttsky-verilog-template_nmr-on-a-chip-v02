@@ -107,7 +107,7 @@ module tb ();
 
         #200;
         $display("[TB] Simulation completed successfully.");
-        $finish;
+   //   $finish;
     end
    
 // ========================================================================
