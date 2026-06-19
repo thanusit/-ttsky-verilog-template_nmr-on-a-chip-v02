@@ -102,11 +102,12 @@ module tb ();
         $display("[TB] Data Acquisition window active.");
 
         // Wait until completion
-        end
+        
         @(negedge status_busy);
         $display("[TB] Sequencer finished sequence and returned to IDLE.");
 
         #200;
+        end
         $display("[TB] Simulation completed successfully.");
    //   $finish;
     end
