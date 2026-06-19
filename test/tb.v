@@ -132,7 +132,7 @@ module tb ();
             phase_deg = (sample_idx * (carrier_freq / sample_freq) * 360.0) % 360.0;
             
             if (phase_deg < 180.0) begin
-                // Force the internal ADC pin high to bypass top-level bus contentions
+                // Force the adc_in pin high
                 force ui_in[4] = 1'b1; 
             end else begin
                 force ui_in[4] = 1'b0;
