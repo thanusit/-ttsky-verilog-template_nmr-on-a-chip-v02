@@ -82,8 +82,8 @@ module tb ();
        // Example: ({32'd10, 32'd40, 32'd20, 32'd4}) outputs cfg_tA=10, tau=40, cfg_tB=20, 
        // and cfg_echo_count=4 to the SPI 128-bits shift register.
         $display("[TB] Sending configuration packet over SPI interface...");
-       spi_send_word({32'd10, 32'd40, 32'd20, 32'd4});
-
+        spi_send_word({32'd10, 32'd40, 32'd20, 32'd4});
+        repeat (3) begin
         // Trigger pulse sequencing sequence execution
         $display("[TB] Pulsing START to activate sequence execution.");
         #40;
@@ -102,6 +102,7 @@ module tb ();
         $display("[TB] Data Acquisition window active.");
 
         // Wait until completion
+        end
         @(negedge status_busy);
         $display("[TB] Sequencer finished sequence and returned to IDLE.");
 
