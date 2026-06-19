@@ -8,6 +8,8 @@
 // Optimized for Sky130 area/routability constraints (Tiny Tapeout)
 // ============================================================================
 
+`default_nettype none
+
 module quadrature_demodulator (
     input  wire       clk,
     input  wire       rst_n,
@@ -20,8 +22,7 @@ module quadrature_demodulator (
     // 2-bit counter to generate 0, 90, 180, 270 degree Local Oscillator (LO)
     reg [1:0] lo_phase;
     
-    // LO signals represented as signed 2-bit values (+1 or -1)
-    // 2'b01 = +1, 2'b11 = -1
+    // LO signals represented as signed 2-bit values (+1, 0, or -1)
     reg signed [1:0] lo_i;
     reg signed [1:0] lo_q;
 
@@ -29,8 +30,8 @@ module quadrature_demodulator (
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             lo_phase <= 2'b0;
-            lo_i     <= 2'sb01;
-            lo_q     <= 2'sb01;
+            lo_i     <= 2'sb00;
+            lo_q     <= 2'sb00;
         end else if (rx_gate) begin
             lo_phase <= lo_phase + 1'b1;
             case (lo_phase)
@@ -49,45 +50,47 @@ module quadrature_demodulator (
     // Convert 1-bit input to signed representation (+1 or -1)
     wire signed [1:0] signed_adc = adc_in ? 2'sb01 : 2'sb11;
 
-    // Mixer outputs (Signal * LO)
-    reg signed [1:0] mixed_i;
-    reg signed [1:0] mixed_q;
+    // Mixer outputs (Signal * LO) - Expanded to 3-bits signed to prevent overflow
+    reg signed [2:0] mixed_i;
+    reg signed [2:0] mixed_q;
 
     always @(*) begin
         mixed_i = signed_adc * lo_i;
         mixed_q = signed_adc * lo_q;
     end
 
-    // Moving Average Low-Pass Filters (Accumulate over 8 clock cycles)
-    reg [2:0]           filter_cnt;
-    reg signed [4:0]    acc_i;
-    reg signed [4:0]    acc_q;
+    // Filter and Decimation Variables
+    reg [2:0] filter_cnt;
+    reg signed [5:0] acc_i; // Expanded to 6 bits to prevent integration overflow
+    reg signed [5:0] acc_q;
 
+    // Accumulation and Decimation Logic
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             filter_cnt <= 3'b0;
-            acc_i      <= 5'sb0;
-            acc_q      <= 5'sb0;
+            acc_i      <= 6'sb0;
+            acc_q      <= 6'sb0;
             i_out      <= 4'b0;
             q_out      <= 4'b0;
         end else if (rx_gate) begin
             filter_cnt <= filter_cnt + 1'b1;
             
-            // Accumulate mixer results
-            acc_i <= acc_i + mixed_i;
-            acc_q <= acc_q + mixed_q;
-
-            // Output data and reset accumulator every 8 cycles
             if (filter_cnt == 3'b111) begin
-                i_out      <= acc_i[4:1]; // Truncate/scale to match 4-bit output
-                q_out      <= acc_q[4:1];
-                acc_i      <= 5'sb0;
-                acc_q      <= 5'sb0;
+                // Output data scaled to match 4-bit output (using the msb bits)
+                i_out      <= acc_i[5:2]; 
+                q_out      <= acc_q[5:2];
+                // Reset accumulator with the *current* cycle's new data instead of dropping it
+                acc_i      <= mixed_i;
+                acc_q      <= mixed_q;
+            end else begin
+                // Regular accumulation
+                acc_i      <= acc_i + mixed_i;
+                acc_q      <= acc_q + mixed_q;
             end
         end else begin
             filter_cnt <= 3'b0;
-            acc_i      <= 5'sb0;
-            acc_q      <= 5'sb0;
+            acc_i      <= 6'sb0;
+            acc_q      <= 6'sb0;
         end
     end
 
